@@ -1,5 +1,10 @@
 [
-  {"front": "a jar", "back": "un pot"},
-  {"front": "coins lying around at your house", "back": "tu as des pièces qui trainent chez toi"}
-  
+  {"lang": "Anglais", "front": "hello", "back": "bonjour"},
+  {"lang": "Anglais", "front": "eve of the move", "back": "le jour avant"},
+  {"lang": "Anglais", "front": "please", "back": "s'il vous plaît"},
+  {"lang": "Français", "front": "bonjour", "back": "hello"},
+  {"lang": "Français", "front": "merci", "back": "thank you"},
+  {"lang": "Anglais idioms", "front": "To beat around the bush", "back": "Tourner autour du pot"},
+  {"lang": "Anglais idioms", "front": "The new product is selling like hot cakes", "back": "Le produit se vend très bien"},
+  {"lang": "Français idioms", "front": "To kill two birds with one stone", "back": "Faire d'une pierre deux coups"}
 ]

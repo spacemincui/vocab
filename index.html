@@ -21,17 +21,22 @@ main{flex:1;display:flex;flex-direction:column;padding:12px 16px;overflow:auto}
 nav{display:flex;border-top:1px solid #334155;background:#0b1220}
 nav button{flex:1;padding:14px 0;background:none;border:0;color:var(--mut);font-size:15px}
 nav button.on{color:var(--txt);font-weight:600}
+.bar{display:flex;gap:8px;margin-bottom:8px}
+.bar select{flex:1;margin:0}
+.bar button{width:auto;padding:0 16px;border:0;border-radius:12px;background:#334155;color:#fff;font-size:17px}
 .scene{perspective:1000px;flex:1;min-height:240px;max-height:380px;margin:8px 0 16px}
 .card{position:relative;width:100%;height:100%;transition:transform .45s;transform-style:preserve-3d}
 .card.flip{transform:rotateY(180deg)}
-.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:var(--card);border-radius:20px;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font-size:30px;font-weight:600;box-shadow:0 8px 24px #0006}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:var(--card);border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;font-size:30px;font-weight:600;box-shadow:0 8px 24px #0006}
+.face small{font-size:13px;font-weight:400;color:var(--mut);margin-bottom:10px}
 .back{transform:rotateY(180deg);background:var(--acc)}
+.back small{color:#e0e7ff}
 .hint{text-align:center;color:var(--mut);font-size:13px;margin-bottom:12px}
 .row{display:flex;gap:12px}
 .row button,.btn{flex:1;padding:16px;border:0;border-radius:14px;font-size:17px;font-weight:600;color:#fff}
 .ko{background:var(--ko)}.ok{background:var(--ok)}.pri{background:var(--acc)}.sec{background:#334155}
 .empty{text-align:center;color:var(--mut);margin-top:60px;line-height:1.6}
-input,textarea{width:100%;padding:14px;margin:6px 0 12px;border-radius:12px;border:1px solid #334155;background:var(--card);color:var(--txt);font-size:17px}
+input,select{width:100%;padding:14px;margin:6px 0 12px;border-radius:12px;border:1px solid #334155;background:var(--card);color:var(--txt);font-size:17px}
 label{font-size:13px;color:var(--mut)}
 .item{display:flex;align-items:center;gap:10px;background:var(--card);padding:12px 14px;border-radius:12px;margin-bottom:8px}
 .item div{flex:1}.item small{color:var(--mut);display:block}
@@ -51,16 +56,37 @@ label{font-size:13px;color:var(--mut)}
 <script>
 // Boîtes de Leitner : intervalle (en jours) avant la prochaine révision
 const INTERVALS=[0,1,2,4,8,16];
-const KEY='vocab-cards-v1';
-let cards=load();
+const KEY='vocab-cards-v1', SET='vocab-settings-v1', LANGS='vocab-langs-v1', DEL='vocab-deleted-v1';
+const DEFAULT_LANG='Anglais';
+const BASE_LANGS=['Anglais','Français'];
+
+const read=(k,d)=>{try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}};
+const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+
+let cards=read(KEY,[]);
+cards.forEach(c=>{if(!c.lang)c.lang=DEFAULT_LANG});   // anciennes cartes sans langue
+let settings=Object.assign({lang:DEFAULT_LANG,rev:false},read(SET,{}));
+let customLangs=read(LANGS,[]);
 let view='study', flipped=false, current=null;
 
-function load(){try{return JSON.parse(localStorage.getItem(KEY))||[]}catch(e){return[]}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(cards))}catch(e){}}
+const save=()=>write(KEY,cards);
+const saveSettings=()=>write(SET,settings);
 const day=()=>Math.floor(Date.now()/864e5);
-const DEL='vocab-deleted-v1';
-function deleted(){try{return JSON.parse(localStorage.getItem(DEL))||[]}catch(e){return[]}}
-const keyOf=c=>(c.front+'|'+c.back).toLowerCase();
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const keyOf=c=>(c.front+'|'+c.back+'|'+(c.lang||DEFAULT_LANG)).toLowerCase();
+const deleted=()=>read(DEL,[]);
+
+function languages(){
+  const all=[...BASE_LANGS,...customLangs,...cards.map(c=>c.lang)];
+  return [...new Set(all)];
+}
+const inLang=()=>cards.filter(c=>c.lang===settings.lang);
+const due=()=>inLang().filter(c=>c.next<=day());
+
+function langSelect(id,selected){
+  return `<select id="${id}">${languages().map(l=>`<option ${l===selected?'selected':''}>${esc(l)}</option>`).join('')}</select>`;
+}
+
 // Charge mots.json (hébergé avec l'appli) et ajoute les cartes absentes
 async function sync(){
   try{
@@ -71,52 +97,67 @@ async function sync(){
     const have=new Set(cards.map(keyOf).concat(deleted()));
     let n=0;
     d.forEach(x=>{
-      if(x&&x.front&&x.back&&!have.has(keyOf(x))){
-        cards.push({id:Date.now()+Math.random(),front:String(x.front),back:String(x.back),box:0,next:day()});
-        have.add(keyOf(x));n++;
-      }
+      if(!x||!x.front||!x.back)return;
+      const c={id:Date.now()+Math.random(),front:String(x.front),back:String(x.back),lang:x.lang?String(x.lang):DEFAULT_LANG,box:0,next:day()};
+      if(!have.has(keyOf(c))){cards.push(c);have.add(keyOf(c));n++}
     });
     if(n){save();render()}
   }catch(e){}
 }
-const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const due=()=>cards.filter(c=>c.next<=day());
 
 function pick(){
   const d=due();
   current=d.length?d[Math.floor(Math.random()*d.length)]:null;
   flipped=false;
 }
+
 function render(){
   const m=document.getElementById('main');
-  document.getElementById('stat').textContent=cards.length+' cartes · '+due().length+' à revoir';
+  document.getElementById('stat').textContent=inLang().length+' cartes · '+due().length+' à revoir';
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
+  const L=settings.lang;
+
   if(view==='study'){
-    if(!cards.length){m.innerHTML='<div class="empty">Aucune carte pour l\'instant.<br>Va dans « Ajouter » pour commencer.</div>';return}
-    if(!current||!cards.includes(current)) pick();
-    if(!current){m.innerHTML='<div class="empty">🎉 Tout est révisé pour aujourd\'hui !<br>Reviens demain.</div>';return}
-    m.innerHTML=`<div class="scene" id="scene"><div class="card ${flipped?'flip':''}" id="card">
-      <div class="face">${esc(current.front)}</div>
-      <div class="face back">${esc(current.back)}</div></div></div>
+    const bar=`<div class="bar">${langSelect('lang',L)}<button id="rev" title="Inverser le sens">⇄</button></div>`;
+    if(!inLang().length){m.innerHTML=bar+`<div class="empty">Aucune carte en ${esc(L)}.<br>Va dans « Ajouter » pour commencer.</div>`;bindBar();return}
+    if(!current||!cards.includes(current)||current.lang!==L) pick();
+    if(!current){m.innerHTML=bar+'<div class="empty">🎉 Tout est révisé pour aujourd\'hui !<br>Reviens demain.</div>';bindBar();return}
+    const q=settings.rev?current.back:current.front, a=settings.rev?current.front:current.back;
+    const ql=settings.rev?'Traduction':L, al=settings.rev?L:'Traduction';
+    m.innerHTML=bar+`<div class="scene" id="scene"><div class="card ${flipped?'flip':''}" id="card">
+      <div class="face"><small>${esc(ql)}</small>${esc(q)}</div>
+      <div class="face back"><small>${esc(al)}</small>${esc(a)}</div></div></div>
       <div class="hint">${flipped?'Tu le savais ?':'Touche la carte pour la retourner'}</div>
       <div class="row ${flipped?'':'hidden'}">
         <button class="ko" id="no">À revoir</button><button class="ok" id="yes">Je sais</button></div>`;
+    bindBar();
     document.getElementById('scene').onclick=()=>{flipped=!flipped;render()};
     if(flipped){
       document.getElementById('no').onclick=()=>answer(false);
       document.getElementById('yes').onclick=()=>answer(true);
     }
+
   } else if(view==='add'){
-    m.innerHTML=`<label>Recto (mot / question)</label><input id="f" autocomplete="off" autocapitalize="none">
-      <label>Verso (traduction / réponse)</label><input id="b" autocomplete="off" autocapitalize="none">
+    m.innerHTML=`<label>Langue</label>
+      <div class="bar">${langSelect('l',L)}<button id="newlang" title="Nouvelle langue">＋</button></div>
+      <label>Mot ou phrase (dans la langue choisie)</label><input id="f" autocomplete="off" autocapitalize="none">
+      <label>Traduction</label><input id="b" autocomplete="off" autocapitalize="none">
       <button class="btn pri" id="addb" style="width:100%">Ajouter la carte</button>
       <div style="height:24px"></div>
       <div class="row"><button class="sec" id="exp">Exporter</button><button class="sec" id="imp">Importer</button></div>
       <input type="file" id="file" accept="application/json" class="hidden">`;
+    document.getElementById('l').onchange=e=>{settings.lang=e.target.value;saveSettings();render()};
+    document.getElementById('newlang').onclick=()=>{
+      const n=(prompt('Nom de la nouvelle langue (ex. Espagnol) :')||'').trim();
+      if(!n)return;
+      const ex=languages().find(l=>l.toLowerCase()===n.toLowerCase());
+      if(!ex){customLangs.push(n);write(LANGS,customLangs)}
+      settings.lang=ex||n;saveSettings();render();
+    };
     const add=()=>{
       const f=document.getElementById('f').value.trim(),b=document.getElementById('b').value.trim();
       if(!f||!b)return;
-      cards.push({id:Date.now()+Math.random(),front:f,back:b,box:0,next:day()});
+      cards.push({id:Date.now()+Math.random(),front:f,back:b,lang:document.getElementById('l').value,box:0,next:day()});
       save();render();document.getElementById('f').focus();
     };
     document.getElementById('addb').onclick=add;
@@ -129,25 +170,44 @@ function render(){
     document.getElementById('imp').onclick=()=>document.getElementById('file').click();
     document.getElementById('file').onchange=e=>{
       const r=new FileReader();
-      r.onload=()=>{try{const d=JSON.parse(r.result);if(Array.isArray(d)){cards=cards.concat(d.filter(x=>x.front&&x.back));save();view='list';render()}}catch(_){alert('Fichier invalide')}};
+      r.onload=()=>{try{
+        const d=JSON.parse(r.result);
+        if(Array.isArray(d)){
+          d.filter(x=>x&&x.front&&x.back).forEach(x=>cards.push({id:Date.now()+Math.random(),front:String(x.front),back:String(x.back),lang:x.lang||DEFAULT_LANG,box:x.box||0,next:x.next||day()}));
+          save();view='list';render();
+        }
+      }catch(_){alert('Fichier invalide')}};
       r.readAsText(e.target.files[0]);
     };
+
   } else {
-    m.innerHTML=cards.length?cards.map(c=>`<div class="item"><div>${esc(c.front)}<small>${esc(c.back)} · boîte ${c.box+1}</small></div><button data-id="${c.id}">✕</button></div>`).join(''):'<div class="empty">Liste vide.</div>';
+    const bar=`<div class="bar">${langSelect('lang',L)}</div>`;
+    const list=inLang();
+    m.innerHTML=bar+(list.length?list.map(c=>`<div class="item"><div>${esc(c.front)}<small>${esc(c.back)} · boîte ${c.box+1}</small></div><button data-id="${c.id}">✕</button></div>`).join(''):'<div class="empty">Liste vide.</div>');
+    bindBar();
     m.querySelectorAll('.item button').forEach(b=>b.onclick=()=>{
       if(confirm('Supprimer cette carte ?')){
         const c=cards.find(c=>String(c.id)===b.dataset.id);
-        if(c){try{localStorage.setItem(DEL,JSON.stringify(deleted().concat(keyOf(c))))}catch(e){}}
-        cards=cards.filter(c=>String(c.id)!==b.dataset.id);save();render()
+        if(c)write(DEL,deleted().concat(keyOf(c)));
+        cards=cards.filter(c=>String(c.id)!==b.dataset.id);save();render();
       }
     });
   }
 }
+
+function bindBar(){
+  const s=document.getElementById('lang');
+  if(s)s.onchange=e=>{settings.lang=e.target.value;saveSettings();pick();render()};
+  const r=document.getElementById('rev');
+  if(r)r.onclick=()=>{settings.rev=!settings.rev;saveSettings();flipped=false;render()};
+}
+
 function answer(ok){
   current.box=ok?Math.min(current.box+1,INTERVALS.length-1):0;
   current.next=ok?day()+INTERVALS[current.box]:day();
   save();pick();render();
 }
+
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{view=b.dataset.v;if(view==='study')pick();render()});
 render();
 sync();
