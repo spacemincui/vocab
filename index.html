@@ -58,6 +58,27 @@ let view='study', flipped=false, current=null;
 function load(){try{return JSON.parse(localStorage.getItem(KEY))||[]}catch(e){return[]}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(cards))}catch(e){}}
 const day=()=>Math.floor(Date.now()/864e5);
+const DEL='vocab-deleted-v1';
+function deleted(){try{return JSON.parse(localStorage.getItem(DEL))||[]}catch(e){return[]}}
+const keyOf=c=>(c.front+'|'+c.back).toLowerCase();
+// Charge mots.json (hébergé avec l'appli) et ajoute les cartes absentes
+async function sync(){
+  try{
+    const r=await fetch('mots.json?'+Date.now(),{cache:'no-store'});
+    if(!r.ok)return;
+    const d=await r.json();
+    if(!Array.isArray(d))return;
+    const have=new Set(cards.map(keyOf).concat(deleted()));
+    let n=0;
+    d.forEach(x=>{
+      if(x&&x.front&&x.back&&!have.has(keyOf(x))){
+        cards.push({id:Date.now()+Math.random(),front:String(x.front),back:String(x.back),box:0,next:day()});
+        have.add(keyOf(x));n++;
+      }
+    });
+    if(n){save();render()}
+  }catch(e){}
+}
 const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const due=()=>cards.filter(c=>c.next<=day());
 
@@ -114,7 +135,11 @@ function render(){
   } else {
     m.innerHTML=cards.length?cards.map(c=>`<div class="item"><div>${esc(c.front)}<small>${esc(c.back)} · boîte ${c.box+1}</small></div><button data-id="${c.id}">✕</button></div>`).join(''):'<div class="empty">Liste vide.</div>';
     m.querySelectorAll('.item button').forEach(b=>b.onclick=()=>{
-      if(confirm('Supprimer cette carte ?')){cards=cards.filter(c=>String(c.id)!==b.dataset.id);save();render()}
+      if(confirm('Supprimer cette carte ?')){
+        const c=cards.find(c=>String(c.id)===b.dataset.id);
+        if(c){try{localStorage.setItem(DEL,JSON.stringify(deleted().concat(keyOf(c))))}catch(e){}}
+        cards=cards.filter(c=>String(c.id)!==b.dataset.id);save();render()
+      }
     });
   }
 }
@@ -125,6 +150,8 @@ function answer(ok){
 }
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{view=b.dataset.v;if(view==='study')pick();render()});
 render();
+sync();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
 </script>
 </body>
 </html>
